@@ -535,7 +535,7 @@ def _parse_short_form(text: str, wallets: list[str]) -> Optional[dict]:
 
 
 def _is_one_window_message(text: str) -> bool:
-    """Сообщение в формате текстового ввода: ключевое слово или сумма в начале."""
+    """Сообщение в формате текстового ввода: ключевое слово или сумма в начале. Одно число не считаем — это ввод суммы в пошаговом сценарии."""
     if not text or not text.strip():
         return False
     parts = text.strip().split()
@@ -546,6 +546,9 @@ def _is_one_window_message(text: str) -> bool:
         return True
     if first == "-" and len(parts) >= 2:
         return True
+    # Сумма в начале = поступление, но одно слово "5000" — это ввод суммы в шаге, не перехватываем
+    if len(parts) == 1 and DDSSheetService.parse_amount(parts[0].replace(",", ".")) is not None:
+        return False
     if DDSSheetService.parse_amount(parts[0].replace(",", ".")) is not None and DDSSheetService.parse_amount(parts[0].replace(",", ".")) > 0:
         return True
     return False
