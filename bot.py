@@ -3192,10 +3192,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(funds_button_callback, pattern=f"^{re.escape(CB_RUN_FUNDS)}$"))
     # Кнопки после текстового ввода (выбор статьи, подтверждение)
     app.add_handler(CallbackQueryHandler(handle_text_form_callback, pattern="^text_"))
-    # /start и /step — пошаговый ввод (дата → тип операции → сумма → ...). Регистрируем ДО текстовой формы,
-    # чтобы ввод суммы/даты/контрагента в пошаговом потоке обрабатывал ConversationHandler, а не handle_form.
-    app.add_handler(conv)
-    # Текстовый ввод: при _waiting_for — любой текст как ввод редактирования; иначе — только сообщения в формате операции
+    # Текстовый ввод операций — регистрируем ПЕРЕД ConversationHandler, иначе пошаговый сценарий перехватывает сообщения
     class TextFormHandler(MessageHandler):
         def check_update(self, update):
             if not super().check_update(update):
@@ -3203,6 +3200,8 @@ def main() -> None:
             return _text_form_should_handle(update)
 
     app.add_handler(TextFormHandler(filters.TEXT & ~filters.COMMAND, handle_form))
+    # Пошаговый ввод (дата → тип → статья → ...) — после текстовой формы
+    app.add_handler(conv)
     # Fallback: если нажали «Подтвердить», но диалог не обработал (сессия потеряна) — хотя бы снять загрузку и ответить
     app.add_handler(CallbackQueryHandler(
         lambda u, c: _confirm_fallback(u, c),
