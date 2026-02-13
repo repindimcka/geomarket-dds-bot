@@ -1,0 +1,6 @@
+python-telegram-bot[webhooks]==21.7
+aiohttp>=3.8.0
+gspread==6.1.2
+google-auth==2.36.0
+python-dotenv==1.0.1
+requests>=2.28.0

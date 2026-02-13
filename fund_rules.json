@@ -1,0 +1,22 @@
+[
+  {
+    "source": "Точка Банк",
+    "destination": "Фонд операционных расходов",
+    "percent": 40.0
+  },
+  {
+    "source": "Точка Банк",
+    "destination": "Фонд Развития",
+    "percent": 10.0
+  },
+  {
+    "source": "Точка Банк",
+    "destination": "Фонд Прибыли",
+    "percent": 10.0
+  },
+  {
+    "source": "Точка Банк",
+    "destination": "Фонд Безопасности",
+    "percent": 5.0
+  }
+]
