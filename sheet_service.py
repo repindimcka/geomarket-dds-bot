@@ -262,11 +262,7 @@ class DDSSheetService:
             val, ts = self._cache[key]
             if now - ts < CACHE_TTL:
                 return val
-        t0 = time.monotonic()
         val = _retry_sheets_fetch(fetch_fn)
-        elapsed = time.monotonic() - t0
-        if elapsed > 0.5 and (key == "article_usage" or key.startswith("articles_") or key == "wallets"):
-            print(f"[Бот] Таблица: {key} за {elapsed:.1f} с", file=sys.stderr)
         self._cache[key] = (val, now)
         return val
 
