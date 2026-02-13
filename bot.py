@@ -605,6 +605,9 @@ async def handle_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
     if not text or not _is_one_window_message(text):
+        await update.message.reply_text(
+            "Чтобы ввести операцию одним сообщением, начните с: Поступление / Доход / Плюс, Выбытие / Расход / Минус или Перевод.\nПодробнее: /text"
+        )
         return
 
     try:
@@ -3077,7 +3080,8 @@ def main() -> None:
                 CallbackQueryHandler(date_today, pattern=f"^{re.escape(CB_TODAY)}$"),
                 CallbackQueryHandler(date_preset, pattern=f"^{re.escape(CB_DATE_PREFIX)}"),
                 CallbackQueryHandler(cancel_cmd, pattern=f"^{re.escape(CB_CANCEL)}$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, date_text),
+                # Текст в формате операции (Поступление/Перевод...) не перехватываем — пусть обработает handle_form
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~one_window_filter, date_text),
             ],
             TYPE_OP: [CallbackQueryHandler(type_selected)],
             ARTICLE: [
@@ -3090,18 +3094,18 @@ def main() -> None:
             AMOUNT: [
                 CallbackQueryHandler(cancel_callback, pattern=f"^{re.escape(CB_CANCEL)}$"),
                 CallbackQueryHandler(amount_back, pattern=f"^{re.escape(CB_BACK)}$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, amount_entered),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~one_window_filter, amount_entered),
             ],
             COUNTERPARTY: [
                 CallbackQueryHandler(cancel_callback, pattern=f"^{re.escape(CB_CANCEL)}$"),
                 CallbackQueryHandler(counterparty_back, pattern=f"^{re.escape(CB_BACK)}$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, counterparty_entered),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~one_window_filter, counterparty_entered),
                 CallbackQueryHandler(counterparty_skip, pattern=f"^{re.escape(CB_SKIP)}$"),
             ],
             PURPOSE: [
                 CallbackQueryHandler(cancel_callback, pattern=f"^{re.escape(CB_CANCEL)}$"),
                 CallbackQueryHandler(purpose_back, pattern=f"^{re.escape(CB_BACK)}$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, purpose_entered),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~one_window_filter, purpose_entered),
                 CallbackQueryHandler(purpose_skip, pattern=f"^{re.escape(CB_SKIP)}$"),
             ],
             CONFIRM: [
@@ -3123,7 +3127,7 @@ def main() -> None:
                 ),
             ],
             CONFIRM_EDIT_INPUT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_edit_input),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~one_window_filter, confirm_edit_input),
             ],
             TRANSFER_FROM: [CallbackQueryHandler(transfer_from_selected)],
             TRANSFER_TO: [CallbackQueryHandler(transfer_to_selected)],
