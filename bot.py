@@ -1115,16 +1115,18 @@ def _format_stats_report(
     """Формирует текст отчёта для /stats."""
     lines = [f"📊 *{period_label}*", f"Период: {period_str}", ""]
     if start_balance is not None:
-        lines.append(f"Начальный остаток: {_format_amount(start_balance)} ₽")
+        lines.append(f"Начальный остаток: *{_format_amount(start_balance)} ₽*")
+    lines.append("")
     if revenue is not None:
-        lines.append(f"Приходы: +{_format_amount(revenue)} ₽")
+        lines.append(f"Поступления: +{_format_amount(revenue)} ₽")
     if expenses is not None:
-        lines.append(f"Расходы: -{_format_amount(expenses)} ₽")
+        lines.append(f"Выбытия: -{_format_amount(expenses)} ₽")
     change_str = _format_amount(abs(change))
     sign = "+" if change >= 0 else "−"
     lines.append(f"Изменение: {sign}{change_str} ₽")
+    lines.append("")
     if end_balance is not None:
-        lines.append(f"Текущий баланс: {_format_amount(end_balance)} ₽")
+        lines.append(f"Текущий баланс: *{_format_amount(end_balance)} ₽*")
     return "\n".join(lines)
 
 
