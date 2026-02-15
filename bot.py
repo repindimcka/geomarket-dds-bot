@@ -1117,7 +1117,7 @@ def _format_stats_report(
     if start_balance is not None:
         lines.append(f"Начальный остаток: {_format_amount(start_balance)} ₽")
     if revenue is not None:
-        lines.append(f"Доходы: +{_format_amount(revenue)} ₽")
+        lines.append(f"Приходы: +{_format_amount(revenue)} ₽")
     if expenses is not None:
         lines.append(f"Расходы: -{_format_amount(expenses)} ₽")
     change_str = _format_amount(abs(change))
@@ -1342,7 +1342,9 @@ async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if report is None:
         try:
             await _retry_on_network(
-                lambda: query.edit_message_text("Нет данных за выбранный период или ошибка чтения листа «ДДС: Сводный».")
+                lambda: query.edit_message_text(
+                    "Нет данных за выбранный период или ошибка чтения таблицы («ДДС: месяц» или «ДДС: Сводный»)."
+                )
             )
         except Exception:
             pass

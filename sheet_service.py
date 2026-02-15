@@ -1006,12 +1006,12 @@ class DDSSheetService:
                 start_balance = val
             elif "денег на конец" in lab or "конец месяца" in lab:
                 end_balance = val
-            elif "изменение денег" in lab or "изменение за месяц" in lab:
+            elif "изменение денег за месяц" in lab or ("изменение денег" in lab and "за месяц" in lab):
                 change = val
-            elif "выручка" in lab or "доходы" in lab:
+            elif "выручка" in lab or ("доходы" in lab and "расход" not in lab):
                 if revenue is None and val >= 0:
                     revenue = val
-            elif "расходы" in lab:
+            elif lab.strip() == "расходы" or (lab == "итого расходы" or "всего расход" in lab):
                 expenses = abs(val) if val < 0 else val
         if start_balance is None and end_balance is not None and change is not None:
             start_balance = end_balance - change
@@ -1021,6 +1021,10 @@ class DDSSheetService:
             change = end_balance - start_balance
         if start_balance is None and end_balance is None:
             return None
+        if expenses is None and change is not None and change < 0 and (revenue is None or revenue == 0):
+            expenses = abs(change)
+        if revenue is None:
+            revenue = 0
         return {
             "start_balance": start_balance or 0,
             "end_balance": end_balance or 0,
@@ -1031,10 +1035,9 @@ class DDSSheetService:
 
     def get_summary_for_date_range(self, date_from: str, date_to: str) -> Optional[dict]:
         """
-        Сводка за диапазон дат по реестру «ДДС: месяц».
+        Сводка за диапазон дат по реестру «ДДС: месяц» (колонки C=дата, D=сумма).
         date_from, date_to в формате ДД.ММ.ГГГГ.
-        Считает доходы (сумма положительных), расходы (абсолютная сумма отрицательных), изменение.
-        Текущий баланс = get_balances()["Итого"], начальный = текущий − изменение.
+        Один запрос get(C:D) вместо двух col_values — быстрее.
         """
         from datetime import datetime
 
@@ -1049,18 +1052,20 @@ class DDSSheetService:
         if d1 is None or d2 is None or d1 > d2:
             return None
         ws = self._worksheet(SHEET_REGISTER)
-        col_c = ws.col_values(COL_DATE)
-        col_d = ws.col_values(COL_AMOUNT)
+        # Один запрос: колонки C (дата) и D (сумма), до 3000 строк
+        range_cd = "C2:D3000"
+        rows = _retry_sheets_fetch(lambda: ws.get(range_cd))
         total_income = 0.0
         total_expense = 0.0
-        for i in range(1, min(len(col_c), len(col_d))):
-            d = (col_c[i] or "").strip()
+        for row in rows:
+            d = (row[0] if len(row) > 0 else "").strip()
+            amt_str = (row[1] if len(row) > 1 else "").strip()
+            if not d:
+                continue
             dt = parse_dt(d)
-            if dt is None:
+            if dt is None or dt < d1 or dt > d2:
                 continue
-            if dt < d1 or dt > d2:
-                continue
-            amt = self._parse_number(str(col_d[i] or "").strip())
+            amt = self._parse_number(amt_str)
             if amt is None:
                 continue
             if amt > 0:
