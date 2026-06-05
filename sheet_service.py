@@ -738,16 +738,18 @@ class DDSSheetService:
         self._cache.pop("wallets", None)
         self.invalidate_balances_cache()
 
-    def get_daily_income(self, date_str: str) -> float:
+    def get_daily_income(self, date_str: str, wallet_filter: Optional[str] = None) -> float:
         """
         Сумма поступлений за день: сумма положительных сумм в реестре за указанную дату.
         Исключаются «технические» поступления от перевода между счетами (отчисления в фонды и т.п.),
         иначе выручка завышается и повторный /funds считает отчисления дважды.
+        Если wallet_filter задан, считаются только поступления на этот кошелек.
         date_str в формате ДД.ММ.ГГГГ.
         """
         ws = self._worksheet(SHEET_REGISTER)
         col_c = ws.col_values(COL_DATE)
         col_d = ws.col_values(COL_AMOUNT)
+        col_e = ws.col_values(COL_WALLET)
         col_i = ws.col_values(COL_ARTICLE)
         try:
             _, article_in_transfer = self.get_transfer_articles()
@@ -755,6 +757,7 @@ class DDSSheetService:
             article_in_transfer = None
         total = 0.0
         date_norm = (date_str or "").strip()
+        wallet_norm = (wallet_filter or "").strip().lower() if wallet_filter else None
         for i in range(max(0, 1), min(len(col_c), len(col_d))):
             d = (col_c[i] or "").strip()
             if d != date_norm:
@@ -765,6 +768,11 @@ class DDSSheetService:
             article = (col_i[i] or "").strip() if i < len(col_i) else ""
             if article_in_transfer and article == article_in_transfer:
                 continue
+            # Если задан фильтр по кошельку, проверяем совпадение
+            if wallet_norm:
+                wallet = (col_e[i] or "").strip().lower() if i < len(col_e) else ""
+                if wallet != wallet_norm:
+                    continue
             total += amt
         return round(total, 2)
 

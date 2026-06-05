@@ -6,17 +6,17 @@
   },
   {
     "source": "Точка Банк",
-    "destination": "Фонд Развития",
-    "percent": 10.0
-  },
-  {
-    "source": "Точка Банк",
     "destination": "Фонд Прибыли",
-    "percent": 10.0
+    "percent": 15.0
   },
   {
     "source": "Точка Банк",
     "destination": "Фонд Безопасности",
-    "percent": 5.0
+    "percent": 7.0
+  },
+  {
+    "source": "Точка Банк",
+    "destination": "Фонд Развития",
+    "percent": 18.0
   }
 ]

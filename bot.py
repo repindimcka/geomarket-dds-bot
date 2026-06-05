@@ -302,9 +302,10 @@ CB_TRANSFER_TO_PAGE_PREV = "tr_to_page_prev"
 
 # Правила отчислений по умолчанию: источник → фонд, %
 DEFAULT_FUND_RULES = [
-    {"source": "Сбербанк", "destination": "Фонд Развития", "percent": 10},
-    {"source": "Сбербанк", "destination": "Фонд Мастер", "percent": 10},
-    {"source": "Сбербанк", "destination": "Фонд Налоги", "percent": 5},
+    {"source": "Точка Банк", "destination": "Фонд операционных расходов", "percent": 40},
+    {"source": "Точка Банк", "destination": "Фонд Прибыли", "percent": 15},
+    {"source": "Точка Банк", "destination": "Фонд Безопасности", "percent": 7},
+    {"source": "Точка Банк", "destination": "Фонд Развития", "percent": 18},
 ]
 
 DATE_PATTERN = re.compile(r"^\s*(\d{1,2})\.(\d{1,2})\.(\d{4})\s*$")
@@ -386,40 +387,67 @@ def _parse_date_range(text: str) -> Optional[tuple[str, str]]:
 
 
 def _fund_rules_path() -> str:
-    return os.getenv("FUND_RULES_PATH", os.path.join(os.path.dirname(__file__) or ".", "fund_rules.json"))
+    """Путь к файлу правил отчислений в фонды. Если FUND_RULES_PATH не задан, ищем рядом с bot.py."""
+    custom_path = os.getenv("FUND_RULES_PATH", "").strip()
+    if custom_path:
+        return custom_path if os.path.isabs(custom_path) else os.path.join(_bot_dir, custom_path)
+    return os.path.join(_bot_dir, "fund_rules.json")
 
 
 def _get_fund_rules(context: ContextTypes.DEFAULT_TYPE) -> list[dict]:
-    """Правила отчислений в фонды: список {source, destination, percent}. Из bot_data или JSON, иначе дефолт."""
+    """
+    Правила отчислений в фонды: список {source, destination, percent}.
+    Загружает из bot_data (если уже загружено), затем из JSON, иначе используется DEFAULT_FUND_RULES.
+    """
+    # Если уже загружено в контекст бота, используем его
     if "fund_rules" in context.bot_data:
         return list(context.bot_data["fund_rules"])
+    
+    # Пытаемся загрузить из JSON файла
     path = _fund_rules_path()
     if os.path.isfile(path):
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, list) and data:
+            if isinstance(data, list) and len(data) > 0:
                 rules = [
-                    {"source": str(r.get("source", "")), "destination": str(r.get("destination", "")), "percent": float(r.get("percent", 0))}
+                    {
+                        "source": str(r.get("source", "")).strip(),
+                        "destination": str(r.get("destination", "")).strip(),
+                        "percent": float(r.get("percent", 0))
+                    }
                     for r in data
                 ]
                 context.bot_data["fund_rules"] = rules
                 return rules
-        except Exception:
-            pass
+        except json.JSONDecodeError as e:
+            print(f"[Бот] Ошибка парсинга {path}: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[Бот] Ошибка чтения {path}: {e}", file=sys.stderr)
+    
+    # Используем правила по умолчанию
     context.bot_data["fund_rules"] = list(DEFAULT_FUND_RULES)
     return list(DEFAULT_FUND_RULES)
 
 
 def _save_fund_rules(context: ContextTypes.DEFAULT_TYPE, rules: list[dict]) -> None:
-    """Сохранить правила в bot_data и в JSON."""
+    """
+    Сохраняет правила отчислений в bot_data и в JSON файл.
+    При ошибке логирует её в stderr.
+    """
     context.bot_data["fund_rules"] = list(rules)
     path = _fund_rules_path()
+    
     try:
+        # Создаем директорию, если её нет
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        
         with open(path, "w", encoding="utf-8") as f:
             json.dump(rules, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        
+        print(f"[Бот] Правила отчислений сохранены в {path}", file=sys.stderr)
+    except Exception as e:
+        print(f"[Бот] ОШИБКА сохранения правил в {path}: {e}", file=sys.stderr)
 
 
 # Текстовый ввод:
@@ -1371,53 +1399,84 @@ async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def _run_funds_logic(context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Общая логика «Рассчитать фонды»: возвращает текст ответа (для /funds и кнопки)."""
+    """
+    Общая логика «Рассчитать фонды»: возвращает текст ответа (для /funds и кнопки).
+    
+    Отчисления производятся ТОЛЬКО для правил, где источник = "Точка Банк".
+    Доход считается только из поступлений на "Точка Банк".
+    """
     svc = _get_sheet_service(context)
     date_str = _today_str()
-    daily_income = await asyncio.to_thread(svc.get_daily_income, date_str)
+    rules = _get_fund_rules(context)
+    if not rules:
+        return "Правила отчислений не настроены. Используйте /settings → Настройка отчислений в фонды."
+    
+    # Фильтруем только правила с источником "Точка Банк"
+    punto_bank_rules = [
+        r for r in rules
+        if (r.get("source") or "").strip().lower() == "точка банк"
+        and (r.get("destination") or "").strip()
+        and float(r.get("percent", 0)) > 0
+    ]
+    
+    if not punto_bank_rules:
+        return (
+            "⚠️ Нет активных правил отчисления для 'Точка Банк'.\n\n"
+            "Отчисления в фонды производятся только из 'Точка Банк'. "
+            "Доход из других источников (например, Карта Т-банк) не облагается отчислениями."
+        )
+    
+    # Получаем доход ТОЛЬКО из "Точка Банк"
+    daily_income = await asyncio.to_thread(svc.get_daily_income, date_str, wallet_filter="Точка Банк")
     if daily_income <= 0:
         return (
-            f"За *{date_str}* не было поступлений.\n\n"
-            "Отчисления в фонды делаются только с новых поступлений."
+            f"За *{date_str}* не было поступлений на Точка Банк.\n\n"
+            "Отчисления в фонды делаются только с поступлений на Точка Банк."
         )
+    
     try:
         already_done = await asyncio.to_thread(svc.get_fund_transfers_done_today, date_str)
     except Exception:
         already_done = {}
-    rules = _get_fund_rules(context)
-    if not rules:
-        return "Правила отчислений не настроены. Используйте /settings → Настройка отчислений в фонды."
-    total_percent = sum(float(r.get("percent", 0)) for r in rules if (r.get("source") or "").strip() and (r.get("destination") or "").strip())
-    total_already_today = sum(already_done.values())  # сумма, уже отправленная в фонды за сегодня до этого запуска
+    
+    total_percent = sum(float(r.get("percent", 0)) for r in punto_bank_rules)
+    total_already_today = sum(already_done.values())
+    
     if total_percent > 0 and total_already_today > 0:
         revenue_already_used = round(total_already_today * 100 / total_percent, 2)
         new_revenue = round(daily_income - revenue_already_used, 2)
     else:
         new_revenue = daily_income
+    
     if new_revenue <= 0:
-        # Уже были отчисления за день — короткое сообщение
         return (
-            f"Отчисления в Фонды за *{date_str}* уже произведены.\n\n"
-            "Отчисления в фонды делаются только с новых поступлений. Новых поступлений не было."
+            f"Отчисления в Фонды за *{date_str}* уже произведены или дохода нет.\n\n"
+            "Отчисления в фонды делаются только с новых поступлений на Точка Банк."
         )
+    
     try:
         direction = await asyncio.to_thread(svc.get_default_business_direction) or (svc.get_business_directions()[0] if svc.get_business_directions() else "")
     except Exception:
         direction = ""
+    
     wallets_affected = set()
-    transfers_made = []  # [(destination, to_transfer), ...] для сортировки по сумме
-    this_run_total = 0.0  # сумма отчислений в этом запуске
-    for r in rules:
-        source = (r.get("source") or "").strip()
+    transfers_made = []
+    this_run_total = 0.0
+    
+    for r in punto_bank_rules:
+        source = "Точка Банк"
         destination = (r.get("destination") or "").strip()
         percent = float(r.get("percent", 0))
-        if not source or not destination or percent <= 0:
+        
+        if not destination or percent <= 0:
             continue
-        # Округляем до рубля: до 50 коп. — в меньшую сторону, 50 коп. и выше — в большую
+        
+        # Округляем до рубля
         raw = new_revenue * percent / 100
         to_transfer = int(raw + 0.5) if raw >= 0 else int(raw - 0.5)
         if to_transfer <= 0:
             continue
+        
         try:
             await asyncio.to_thread(
                 svc.append_transfer,
@@ -1435,10 +1494,12 @@ async def _run_funds_logic(context: ContextTypes.DEFAULT_TYPE) -> str:
             transfers_made.append((destination, to_transfer, None))
         except Exception as e:
             transfers_made.append((destination, -1, str(e)))
+    
     svc.invalidate_balances_cache()
+    
     if not transfers_made:
         return "Отчисления не выполнены."
-    # Сортируем по сумме от большей к меньшей (ошибки в конце)
+    
     transfers_made.sort(key=lambda x: -x[1] if x[1] >= 0 else -1)
     transfer_lines = []
     for dest, to_transfer, err in transfers_made:
@@ -1447,11 +1508,12 @@ async def _run_funds_logic(context: ContextTypes.DEFAULT_TYPE) -> str:
             transfer_lines.append(f"{dest} → *{amt} ₽*")
         else:
             transfer_lines.append(f"{dest}: ошибка — {err or '?'}")
+    
     revenue_str = _format_amount(daily_income)
     lines = [
         f"🏦 Расчет отчислений в Фонды за *{date_str}* произведен.",
         "",
-        f"Выручка за *{date_str}*: *{revenue_str} ₽*",
+        f"Выручка из Точка Банк за *{date_str}*: *{revenue_str} ₽*",
         "",
     ]
     lines.extend(transfer_lines)
